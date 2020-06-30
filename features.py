@@ -2,14 +2,10 @@ import numpy as np
 from abc import abstractmethod
 from typing import Tuple, List
 import matplotlib.pyplot as plt
-import matplotlib.patches as patches
 import cv2 as cv
 
 
 class FeatureExtractor(object):
-
-    def __init__(self):
-        pass
 
     @classmethod
     def to_hsv(cls, input_img: np.array) -> np.array:
@@ -20,20 +16,17 @@ class FeatureExtractor(object):
         raise NotImplementedError
 
     @classmethod
-    def generate_hists(cls, hsv_cell: np.array) -> Tuple[np.array, np.array, np.array]:
-        raise NotImplementedError
-
-    @classmethod
     def normalize_hist(cls, hist: np.array):
-        raise NotImplementedError
-
-    @classmethod
-    def concat_hists(cls):
-        raise NotImplementedError
+        # TODO: Check if this is the right way of normalizing an histogram
+        bin_length = 256/len(hist)              # class width
+        total = np.sum(hist)                    # number of observations
+        for i in range(len(hist)):
+            hist[i] /= bin_length*total
+        return hist
 
     def __call__(self, input_img: np.array):
         """
-        Calculates the feature vector of an input image.
+        Calculates the feature vector of an RGB input image.
 
         :param input_img:
             Input image as numpy array.
@@ -41,15 +34,15 @@ class FeatureExtractor(object):
             Feature vector as numpy array.
         """
         hsv = self.to_hsv(input_img)
-        cells = self.divide(hsv)
-        features = []
-        for cell in cells:
-            h_hist, s_hist, v_hist = self.generate_hists(cell)
-            h_hist_ = self.normalize_hist(h_hist)
-            s_hist_ = self.normalize_hist(s_hist)
-            v_hist_ = self.normalize_hist(v_hist)
-            features.append(np.stack([h_hist_, s_hist_, v_hist_]))
-        return np.stack(features)
+        feats = []
+        masks = self.divide(input_img[:, :, 0])
+        for mask in masks:
+            h_hist_ = self.normalize_hist(cv.calcHist([hsv], [0], mask, [8], [0, 256]))
+            s_hist_ = self.normalize_hist(cv.calcHist([hsv], [1], mask, [12], [0, 256]))
+            v_hist_ = self.normalize_hist(cv.calcHist([hsv], [2], mask, [3], [0, 256]))
+            stacked_hist = np.vstack([h_hist_, s_hist_, v_hist_])
+            feats.extend(stacked_hist)
+        return np.vstack(feats)
 
 
 class Method1Extractor(FeatureExtractor):
@@ -83,7 +76,7 @@ class Method3Extractor(FeatureExtractor):
 class Method4Extractor(FeatureExtractor):
     def __init__(self):
         super(FeatureExtractor, self).__init__()
-        self.patch_generator = CircularPatchGenerator(n_regions=2, circular_radius=300)
+        self.patch_generator = CircularPatchGenerator(n_regions=2)
 
     def divide(self, image: np.array):
         return self.patch_generator(image)
@@ -134,7 +127,7 @@ class SquareImageGenerator(ImagePatchGenerator):
                 # extracts mask
                 new_mask = np.zeros(shape=(width, height))
                 new_mask[actual_i:next_i, actual_j:next_j] = 1
-                j_blocks.append(new_mask.astype(np.bool))
+                j_blocks.append(new_mask.astype(np.uint8))
 
             masks.extend(j_blocks)
         return masks
@@ -170,12 +163,13 @@ class CircularPatchGenerator(ImagePatchGenerator):
         for i in range(width):
             for j in range(height):
                 circular_mask[i, j] = self.is_inside_circle(i, j, center_i, center_j, radius)
-        circular_mask = circular_mask.astype(np.bool)
+        circular_mask = circular_mask.astype(np.uint8)
 
         square_masks = self.square_patch_gen(image)
+
         result = []
         for mask in square_masks:
-            mask[circular_mask] = False
+            mask[circular_mask] = 1
             result.append(mask)
         result.append(circular_mask)
         return result
@@ -184,13 +178,9 @@ class CircularPatchGenerator(ImagePatchGenerator):
 if __name__ == '__main__':
     single_img = cv.imread('data/jpg/100101.jpg', cv.IMREAD_COLOR)
     single_img = cv.cvtColor(single_img, cv.COLOR_BGR2RGB)
-    example = np.random.randint(low=0, high=1, size=(500, 1000, 3))
-    # example[:, :, 2] = 255
-    f = CircularPatchGenerator(2)
-    patches = f(example[:, :, 0])
-    plt.imshow(patches[2], cmap='gray')
+    example = np.random.randint(low=0, high=255, size=(500, 1000, 3), dtype=np.uint8)
+    f = Method4Extractor()
+    features = f(example)
+    plt.imshow(example, cmap='gray')
     plt.show()
-
-
-
 
