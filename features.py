@@ -2,6 +2,7 @@ import numpy as np
 from abc import abstractmethod
 from typing import Tuple, List
 import matplotlib.pyplot as plt
+import matplotlib.patches as patches
 import cv2 as cv
 
 
@@ -79,6 +80,15 @@ class Method3Extractor(FeatureExtractor):
         return self.patch_generator(image)
 
 
+class Method4Extractor(FeatureExtractor):
+    def __init__(self):
+        super(FeatureExtractor, self).__init__()
+        self.patch_generator = CircularPatchGenerator(n_regions=2, circular_radius=300)
+
+    def divide(self, image: np.array):
+        return self.patch_generator(image)
+
+
 class ImagePatchGenerator(object):
 
     def __init__(self, n_regions: int):
@@ -95,10 +105,11 @@ class SquareImageGenerator(ImagePatchGenerator):
 
     def __call__(self, image: np.array) -> List[np.array]:
         """
-        Divides a 2D-image in patches and returns them in a list.
+        Divides a 2D-image in patches and returns the mask of each patch in a list.
         :param image:
             Image that will be divided.
         :return:
+            List of mask patches
         """
         assert len(image.shape) == 2, "The input image has more than 2 channels."
         width = image.shape[0]
@@ -106,7 +117,7 @@ class SquareImageGenerator(ImagePatchGenerator):
         i_step, j_step = int(width/self.n_regions), int(height/self.n_regions)
         i_idxs = [i_step*n for n in range(self.n_regions+1)]
         j_idxs = [j_step*n for n in range(self.n_regions+1)]
-        blocks = []
+        masks = []
         for i_idx in range(self.n_regions):
             j_blocks = []
             actual_i, next_i = i_idxs[i_idx], i_idxs[i_idx + 1]
@@ -120,21 +131,64 @@ class SquareImageGenerator(ImagePatchGenerator):
                 if j_idx == self.n_regions - 1 and next_j != height:
                     next_j = height
 
-                # extracts block
-                block = image[actual_i:next_i, actual_j:next_j]
-                j_blocks.append(block)
-            blocks.extend(j_blocks)
-        return blocks
+                # extracts mask
+                new_mask = np.zeros(shape=(width, height))
+                new_mask[actual_i:next_i, actual_j:next_j] = 1
+                j_blocks.append(new_mask.astype(np.bool))
+
+            masks.extend(j_blocks)
+        return masks
+
+
+class CircularPatchGenerator(ImagePatchGenerator):
+    def __init__(self, n_regions: int):
+        super(CircularPatchGenerator, self).__init__(n_regions)
+        self.square_patch_gen = SquareImageGenerator(n_regions)
+
+    @staticmethod
+    def is_inside_circle(pix_x: int, pix_y: int, center_x: int, center_y: int, radius: int):
+        if (pix_x - center_x)**2 + (pix_y - center_y)**2 <= radius**2:
+            return 1
+        return 0
+
+    def __call__(self, image: np.array) -> List[np.array]:
+        """
+        Divides a 2D-image in a big circular patch and external patches and then returns
+        the mask of each patch in a list.
+        :param image:
+            Image that will be divided.
+        :return:
+            List of mask patches
+        """
+        assert len(image.shape) == 2, "The input image has more than 2 channels."
+        width = image.shape[0]
+        height = image.shape[1]
+        radius = int(min(width, height)*0.42)
+        center_i = int(width/2)
+        center_j = int(height/2)
+        circular_mask = np.zeros(shape=image.shape)
+        for i in range(width):
+            for j in range(height):
+                circular_mask[i, j] = self.is_inside_circle(i, j, center_i, center_j, radius)
+        circular_mask = circular_mask.astype(np.bool)
+
+        square_masks = self.square_patch_gen(image)
+        result = []
+        for mask in square_masks:
+            mask[circular_mask] = False
+            result.append(mask)
+        result.append(circular_mask)
+        return result
 
 
 if __name__ == '__main__':
     single_img = cv.imread('data/jpg/100101.jpg', cv.IMREAD_COLOR)
     single_img = cv.cvtColor(single_img, cv.COLOR_BGR2RGB)
-    example = np.random.randint(low=0, high=1, size=(1024, 770, 3))
+    example = np.random.randint(low=0, high=1, size=(500, 1000, 3))
     # example[:, :, 2] = 255
-    f = Method3Extractor()
-    hsv_img = f.divide(example[:, :, 0])
-    plt.imshow(single_img, cmap='gray')
+    f = CircularPatchGenerator(2)
+    patches = f(example[:, :, 0])
+    plt.imshow(patches[2], cmap='gray')
     plt.show()
 
 
