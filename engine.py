@@ -1,11 +1,13 @@
 import glob
 import cv2 as cv
 from tqdm import tqdm
-from features import Method1Extractor, Method2Extractor, Method3Extractor, Method4Extractor, FeatureExtractor
+from features import *
 import pickle
 import numpy as np
 from distances import *
 from typing import List
+import torch
+from collections import defaultdict
 
 
 class FeatureDB(object):
@@ -21,7 +23,7 @@ class FeatureDB(object):
     def _load_images(img_db: str):
         img_filenames = glob.glob(img_db + '/*.jpg')
         db = {}
-        for image_filename in tqdm(img_filenames, "Loading db"):
+        for image_filename in tqdm(img_filenames[:5], "Loading images"):
             image_label = image_filename.split("/")[-1]
             db[image_label] = cv.cvtColor(cv.imread(image_filename, cv.IMREAD_COLOR), cv.COLOR_BGR2RGB)
         return db
@@ -29,13 +31,13 @@ class FeatureDB(object):
     @classmethod
     def load_feature_db(cls, db_path: str):
         with open(db_path, 'rb') as f:
-            feature_db = pickle.load(f)
+            feature_db = torch.load(f)
         return feature_db
 
     def load_images(self):
         self.images = self._load_images(self.img_db_path)
 
-    def export_features(self, output_db_name: str, method: str):
+    def export_features(self, output_db_name: str, method: FeatureExtractor):
         """
         Exports features to a pickle object.
 
@@ -44,26 +46,35 @@ class FeatureDB(object):
         :param method:
             Method used for feature extraction
         """
-
-        assert method in ['1', '2', '3', '4'], f"Expected method 1, 2, 3 or 4 but got {method}."
-
         db = self._load_images(self.img_db_path) if not self.images else self.images
 
         features = {}
-        methods = {'1': Method1Extractor(),
-                   '2': Method2Extractor(),
-                   '3': Method3Extractor(),
-                   '4': Method4Extractor()}
 
-        for key, img in tqdm(db.items(), "Extracting features"):
-            features[key] = methods[method](img)
+        if isinstance(method, HistogramFeatureExtractor):
+            for key, img in tqdm(db.items(), "Extracting features"):
+                features[key] = method(img)
+        elif isinstance(method, CNNFeatureExtractor):
+
+            # groups images
+            grouped_img = defaultdict(list)
+            for key, img in db.items():
+                shape = str(img.shape)
+                grouped_img[shape].append((key, img))
+
+            # stacks them into a tensor
+            for shape, images in tqdm(grouped_img.items(), "Extracting features"):
+                img_list = [item[1] for item in images]
+                img_names = [item[0] for item in images]
+                img_stacked = np.stack(img_list)
+                img_similarities = method(img_stacked)
+                features.update(dict(zip(img_names, img_similarities)))
 
         self.features = features
-        self.feature_extractor = methods[method]
+        self.feature_extractor = method
 
         print(f"Saving db in {output_db_name}")
         with open(output_db_name, 'wb') as f:
-            pickle.dump(self, f)
+            torch.save(self, f)
 
         print("Ready!")
 
@@ -124,8 +135,12 @@ if __name__ == '__main__':
     img_label = '100000.jpg'
 
     img = cv.cvtColor(cv.imread(f'data/jpg/{img_label}', cv.IMREAD_COLOR), cv.COLOR_BGR2RGB)
-    f = FeatureDB.load_feature_db(db_path)
-    r = Ranker(f)
-    d = CosineDistance()
-    results = r.query_normalized_rank(img, img_label, d)
+    f = FeatureDB(img_db='data/jpg')
+    e1 = VGG16FeatureExtractor(weight_dir='data/model_weights/vgg16-397923af.pth')
+    e2 = Method2Extractor()
+    f.export_features(output_db_name='data/dbs/vgg16features', method=e1)
+    # f = FeatureDB.load_feature_db(db_path)
+    # r = Ranker(f)
+    # d = CosineDistance()
+    # results = r.query_normalized_rank(img, img_label, d)
 
