@@ -6,6 +6,7 @@ import cv2 as cv
 import torchvision.models as models
 import torch
 from torchvision import transforms
+import torch.nn as nn
 
 
 class FeatureExtractor(object):
@@ -190,6 +191,12 @@ class CNNFeatureExtractor(FeatureExtractor):
     NORMALIZER = transforms.Normalize(mean=[0.485, 0.456, 0.406],
                                       std=[0.229, 0.224, 0.225])
 
+    def __init__(self, weight_dir: str, model):
+        self.model = model(pretrained=False)
+        weights = torch.load(weight_dir)
+        self.model.load_state_dict(weights)
+        self.model.eval()
+
     def prepare_image(self, images: np.array):
 
         assert images.dtype == np.uint8
@@ -209,18 +216,6 @@ class CNNFeatureExtractor(FeatureExtractor):
         return images
 
     def __call__(self, *args, **kwargs):
-        raise NotImplementedError
-
-
-class VGG16FeatureExtractor(CNNFeatureExtractor):
-
-    def __init__(self, weight_dir: str):
-        self.vgg16 = models.vgg16(pretrained=False)
-        weights = torch.load(weight_dir)
-        self.vgg16.load_state_dict(weights)
-        self.vgg16.eval()
-
-    def __call__(self, images: np.array):
         """
         Calculates the features of a tensor of images.
 
@@ -229,21 +224,78 @@ class VGG16FeatureExtractor(CNNFeatureExtractor):
         :return:
             Features in a numpy array.
         """
-        image = self.prepare_image(images)
-        feats = self.vgg16.avgpool(self.vgg16.features(image))
+        raise NotImplementedError
+
+
+class VGG16FeatureExtractor(CNNFeatureExtractor):
+
+    def __init__(self, weight_dir: str):
+        super(VGG16FeatureExtractor, self).__init__(weight_dir=weight_dir, model=models.vgg16)
+
+    def __call__(self, images: np.array):
+
+        images = self.prepare_image(images)
+        feats = self.model.avgpool(self.model.features(images))
         feats = feats.flatten(1)
         feats = feats.detach().cpu().numpy()
         return [np.reshape(feats[idx, :], (feats.shape[1], 1)) for idx in range(feats.shape[0])]
 
 
+class GoogleNet(CNNFeatureExtractor):
+
+    def __init__(self, weight_dir: str):
+        super(GoogleNet, self).__init__(weight_dir=weight_dir, model=models.googlenet)
+
+    def __call__(self, images: np.array):
+        x = self.prepare_image(images)
+
+        x = self.model.conv1(x)
+        # N x 64 x 112 x 112
+        x = self.model.maxpool1(x)
+        # N x 64 x 56 x 56
+        x = self.model.conv2(x)
+        # N x 64 x 56 x 56
+        x = self.model.conv3(x)
+        # N x 192 x 56 x 56
+        x = self.model.maxpool2(x)
+        # N x 192 x 28 x 28
+        x = self.model.inception3a(x)
+        # N x 256 x 28 x 28
+        x = self.model.inception3b(x)
+        # N x 480 x 28 x 28
+        x = self.model.maxpool3(x)
+        # N x 480 x 14 x 14
+        x = self.model.inception4a(x)
+        # N x 512 x 14 x 14
+        x = self.model.inception4b(x)
+        # N x 512 x 14 x 14
+        x = self.model.inception4c(x)
+        # N x 512 x 14 x 14
+        x = self.model.inception4d(x)
+        # N x 528 x 14 x 14
+        x = self.model.inception4e(x)
+        # N x 832 x 14 x 14
+        x = self.model.maxpool4(x)
+        # N x 832 x 7 x 7
+        x = self.model.inception5a(x)
+        # N x 832 x 7 x 7
+        x = self.model.inception5b(x)
+        # N x 1024 x 7 x 7
+        x = self.model.avgpool(x)
+        # N x 1024 x 1 x 1
+        x = torch.flatten(x, 1)
+        feats = x.detach().cpu().numpy()
+        return [np.reshape(feats[idx, :], (feats.shape[1], 1)) for idx in range(feats.shape[0])]
+
+
 if __name__ == '__main__':
-    weight_dir = 'data/model_weights/vgg16-397923af.pth'
+    weightdir = 'data/model_weights/vgg16-397923af.pth'
     single_img = cv.imread('data/jpg/100101.jpg', cv.IMREAD_COLOR)
     single_img = cv.cvtColor(single_img, cv.COLOR_BGR2RGB)
     single_img = single_img.astype(np.float) / 255
 
     example = np.random.randint(low=0, high=255, size=(10, 1024, 768, 3), dtype=np.uint8)
-    f1 = VGG16FeatureExtractor(weight_dir=weight_dir)
+    f1 = VGG16FeatureExtractor(weight_dir=weightdir)
     features = f1(example)
 
     plt.imshow(single_img)

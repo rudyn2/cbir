@@ -124,8 +124,10 @@ class Ranker(object):
         return top_query_results, rank, total_query_in_class
 
     def query_normalized_rank(self, image: np.array, image_label: str, similarity_fn: DistanceMeasure, top_k: int = 10):
+
         top_query_results, rank, total_query_in_class = self.query_rank(image, image_label, similarity_fn, top_k)
         norm_rank = (rank - (total_query_in_class + 1) / 2) / len(self.feature_db)
+
         return top_query_results, norm_rank
 
 
@@ -136,7 +138,7 @@ if __name__ == '__main__':
 
     img = cv.cvtColor(cv.imread(f'data/jpg/{img_label}', cv.IMREAD_COLOR), cv.COLOR_BGR2RGB)
     f = FeatureDB(img_db='data/jpg')
-    e1 = VGG16FeatureExtractor(weight_dir='data/model_weights/vgg16-397923af.pth')
+    e1 = GoogleNet(weight_dir='data/model_weights/googlenet-1378be20.pth')
     e2 = Method2Extractor()
     f.export_features(output_db_name='data/dbs/vgg16features', method=e1)
     # f = FeatureDB.load_feature_db(db_path)
