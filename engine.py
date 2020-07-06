@@ -1,9 +1,6 @@
 import glob
-import cv2 as cv
 from tqdm import tqdm
 from features import *
-import pickle
-import numpy as np
 from distances import *
 from typing import List
 import torch
@@ -99,6 +96,8 @@ class Ranker(object):
         return int(s.split(".")[0][:3])
 
     def query(self, image: str, similarity_fn: DistanceMeasure) -> List[np.array]:
+        """Makes a query to the DB and returns the sorted similarity between the query and each image
+        stored in the DB."""
 
         image = cv.cvtColor(cv.imread(self.img_folder_path + '/' + image, cv.IMREAD_COLOR), cv.COLOR_BGR2RGB)
         feature_extractor = self.feature_db.feature_extractor
@@ -116,6 +115,8 @@ class Ranker(object):
         return sorted(similarities, key=lambda x: x[1], reverse=True)
 
     def query_rank(self, image: np.array, image_label: str, similarity_fn: DistanceMeasure, top_k: int = 10):
+        """Makes a query to the DB and returns the top k results, the rank and number of total relevant images
+        that belongs to the same class as the query."""
 
         query_class = self.extract_class(image_label)
         query_results = self.query(image, similarity_fn)
@@ -132,11 +133,17 @@ class Ranker(object):
         return top_query_results, rank, total_query_in_class
 
     def query_normalized_rank(self, image: np.array, image_label: str, similarity_fn: DistanceMeasure, top_k: int = 10):
+        """Makes a query to the DB and returns the top k results, the normalized rank and number of total relevant images
+        that belongs to the same class as the query."""
 
         top_query_results, rank, total_query_in_class = self.query_rank(image, image_label, similarity_fn, top_k)
         norm_rank = (rank - (total_query_in_class + 1) / 2) / len(self.feature_db)
 
-        return top_query_results, norm_rank
+        return top_query_results, norm_rank, total_query_in_class
+
+    def query_irp(self):
+        """Makes a query to the DB and returns the sorted IRP using several distance measures."""
+        raise NotImplementedError
 
 
 class Visualizer(object):
@@ -212,7 +219,7 @@ if __name__ == '__main__':
     db_path = 'data/dbs/method2features'
     img_1, img_2, img_3 = '100000.jpg', '101000.jpg', '102000.jpg'
 
-    f = FeatureDB.load_feature_db(db_path=db_path)
+    f = FeatureDB.load_feature_db(db_path)
     r = Ranker(feature_db=f, img_folder_path=img_path)
     d = CosineDistance()
 
