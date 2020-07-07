@@ -6,6 +6,7 @@ from typing import List
 import torch
 from collections import defaultdict
 import matplotlib.pyplot as plt
+from functools import lru_cache
 
 
 class FeatureDB(object):
@@ -87,9 +88,8 @@ class FeatureDB(object):
 
 class Ranker(object):
 
-    def __init__(self, feature_db: FeatureDB, img_folder_path: str):
+    def __init__(self, feature_db: FeatureDB):
         self.feature_db: FeatureDB = feature_db
-        self.img_folder_path = img_folder_path
 
     @staticmethod
     def extract_class(s: str):
@@ -99,7 +99,7 @@ class Ranker(object):
         """Makes a query to the DB and returns the sorted similarity between the query and each image
         stored in the DB."""
 
-        image = cv.cvtColor(cv.imread(self.img_folder_path + '/' + image, cv.IMREAD_COLOR), cv.COLOR_BGR2RGB)
+        image = cv.cvtColor(cv.imread(self.feature_db.img_db_path + '/' + image, cv.IMREAD_COLOR), cv.COLOR_BGR2RGB)
         feature_extractor = self.feature_db.feature_extractor
         if isinstance(feature_extractor, HistogramFeatureExtractor):
             image_feature = feature_extractor(image)
@@ -108,7 +108,7 @@ class Ranker(object):
             image_feature = feature_extractor(torch.tensor(image).unsqueeze(0))
 
         similarities = []
-        for key, other_feature in tqdm(self.feature_db.features.items(), "Searching in db"):
+        for key, other_feature in self.feature_db.features.items():
             img_name, similarity = key, similarity_fn(image_feature, other_feature)
             similarities.append((img_name, similarity))
 
@@ -141,12 +141,54 @@ class Ranker(object):
 
         return top_query_results, norm_rank, total_query_in_class
 
-    def query_irp(self):
-        """Makes a query to the DB and returns the sorted IRP using several distance measures."""
-        raise NotImplementedError
+
+class IRP(object):
+    """Auxiliary class for Implementation of Inverse Rank Position."""
+
+    def __init__(self, feature_dbs: List[FeatureDB], similarity_fn):
+        self.feature_dbs = feature_dbs
+        self.similarity_fn = similarity_fn
+
+    def sort(self):
+        """Sorts common images using IRP algorithm based on all the feature dbs."""
+        # just search images that exists in all the dbs
+        img_names = set([img_name for img_name in self.feature_dbs[0].features.keys()])
+        for fdb in self.feature_dbs:
+            new_names = [img_name for img_name in fdb.features.keys()]
+            img_names.intersection(new_names)
+        print(f"Running IRP on {len(img_names)} images using {len(self.feature_dbs)} feature dbs")
+
+        results = [(img_name, self.irp_score(img_name)) for img_name in tqdm(img_names, "Calculating IRP Score")]
+        return sorted(results, key=lambda x: x[1], reverse=False)
+
+    def irp_score(self, image: str):
+        """Calculates the IRP Score for a single image."""
+        images_ranked_by_fdb = []
+        for fdb in self.feature_dbs:
+            r = Ranker(fdb)
+            images_ranked_by_fdb.append(r.query(image, self.similarity_fn))
+
+        total = 0
+        for images_ranked in images_ranked_by_fdb:
+            rank = self.get_rank(image, images_ranked)
+            if rank is None:
+                continue
+            total += 1 / rank
+        if total == 0:
+            raise ValueError("It can't rank the image")
+        return 1 / total
+
+    @staticmethod
+    def get_rank(image: str, ranked_images: list):
+        rank = None
+        for idx, (img_name, _) in enumerate(ranked_images):
+            if img_name == image:
+                rank = idx + 1
+        return rank
 
 
 class Visualizer(object):
+    """Auxiliary class for CBIR results visualization."""
 
     def __init__(self, img_folder_path: str):
         self.img_folder_path = img_folder_path
@@ -216,19 +258,14 @@ class Visualizer(object):
 
 if __name__ == '__main__':
     img_path = 'data/jpg'
-    db_path = 'data/dbs/method2features'
     img_1, img_2, img_3 = '100000.jpg', '101000.jpg', '102000.jpg'
 
-    f = FeatureDB.load_feature_db(db_path)
-    r = Ranker(feature_db=f, img_folder_path=img_path)
+    feats_method_1 = FeatureDB.load_feature_db('data/dbs/method2features')
+    feats_method_2 = FeatureDB.load_feature_db('data/dbs/method3features')
+
     d = CosineDistance()
+    irp = IRP([feats_method_1, feats_method_2], d)
+    results = irp.sort()
 
-    results1, results2, results3 = r.query(img_1, d), r.query(img_2, d), r.query(img_3, d)
-
-    v = Visualizer(img_path)
-
-    # v.plot_k_best(img_1, results1)
-    # v.plot_image('108500.jpg')
-    v.plot_query_best_3(query_img=[img_1, img_2, img_3], img_results=[results1, results2, results3])
 
 
