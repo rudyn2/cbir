@@ -93,7 +93,7 @@ class Ranker(object):
 
     @staticmethod
     def extract_class(s: str):
-        return int(s.split(".")[0][:3])
+        return int(s.split(".")[0][1:4])
 
     def query(self, image: str, similarity_fn: DistanceMeasure) -> List[np.array]:
         """Makes a query to the DB and returns the sorted similarity between the query and each image
@@ -149,28 +149,32 @@ class IRP(object):
         self.feature_dbs = feature_dbs
         self.similarity_fn = similarity_fn
 
-    def sort(self):
+    def sort(self, image: str):
         """Sorts common images using IRP algorithm based on all the feature dbs."""
-        # just search images that exists in all the dbs
-        img_names = set([img_name for img_name in self.feature_dbs[0].features.keys()])
-        for fdb in self.feature_dbs:
-            new_names = [img_name for img_name in fdb.features.keys()]
-            img_names.intersection(new_names)
-        print(f"Running IRP on {len(img_names)} images using {len(self.feature_dbs)} feature dbs")
-
-        results = [(img_name, self.irp_score(img_name)) for img_name in tqdm(img_names, "Calculating IRP Score")]
-        return sorted(results, key=lambda x: x[1], reverse=False)
-
-    def irp_score(self, image: str):
-        """Calculates the IRP Score for a single image."""
+        # make a query in all dbs
         images_ranked_by_fdb = []
         for fdb in self.feature_dbs:
             r = Ranker(fdb)
-            images_ranked_by_fdb.append(r.query(image, self.similarity_fn))
+            images_ranked_by_fdb.append(r.query(image, self.similarity_fn)[:10])
+
+        # find the intersection of the names
+        img_names = set([img_name for img_name, _ in images_ranked_by_fdb[0]])
+        for image_rank in images_ranked_by_fdb:
+            new_names = [img_name for img_name, _ in image_rank]
+            img_names.intersection(new_names)
+
+        # calculates the IRP Score using of the common images based on all the db's scores
+        results = []
+        for image_name in img_names:
+            results.append((image_name, self.irp_score(image_name, images_ranked_by_fdb)))
+        return sorted(results, key=lambda x: x[1], reverse=False)
+
+    def irp_score(self, image_to_compare: str, images_ranked: list):
+        """Calculates the IRP Score for a single image using the given rankings."""
 
         total = 0
-        for images_ranked in images_ranked_by_fdb:
-            rank = self.get_rank(image, images_ranked)
+        for images_ranked in images_ranked:
+            rank = self.get_rank(image_to_compare, images_ranked)
             if rank is None:
                 continue
             total += 1 / rank
@@ -180,11 +184,10 @@ class IRP(object):
 
     @staticmethod
     def get_rank(image: str, ranked_images: list):
-        rank = None
         for idx, (img_name, _) in enumerate(ranked_images):
             if img_name == image:
-                rank = idx + 1
-        return rank
+                return idx + 1
+        return None
 
 
 class Visualizer(object):
@@ -265,7 +268,7 @@ if __name__ == '__main__':
 
     d = CosineDistance()
     irp = IRP([feats_method_1, feats_method_2], d)
-    results = irp.sort()
+    results = irp.sort(img_1)
 
 
 
