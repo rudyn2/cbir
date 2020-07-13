@@ -9,21 +9,23 @@ class DistanceMeasure(object):
         raise NotImplementedError
 
 
-class ChiSquareDistance(DistanceMeasure):
+class ChiSquareSimilarity(DistanceMeasure):
 
     def __call__(self, x: np.array, y: np.array) -> np.float:
         assert x.shape == y.shape, "x and y must be equal"
-        return 0.5 * np.sum(np.divide((x-y)**2, x+y))
+        distance = 0.5 * np.sum(np.divide((x-y)**2, x+y))
+        return 1 / (1 + distance)
 
 
-class EuclideanDistance(DistanceMeasure):
+class EuclideanSimilarity(DistanceMeasure):
 
     def __call__(self, x: np.array, y: np.array) -> np.float:
         assert x.shape == y.shape, "x and y must be equal"
-        return np.sqrt(np.sum((x-y)**2))
+        distance = np.sqrt(np.sum((x-y)**2))
+        return 1 / (1 + distance)
 
 
-class CosineDistance(DistanceMeasure):
+class CosineSimilarity(DistanceMeasure):
 
     def __call__(self, x: np.array, y: np.array) -> np.float:
         assert x.shape == y.shape, "x and y must be equal"

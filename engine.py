@@ -6,7 +6,6 @@ from typing import List
 import torch
 from collections import defaultdict
 import matplotlib.pyplot as plt
-from functools import lru_cache
 
 
 class FeatureDB(object):
@@ -265,10 +264,9 @@ if __name__ == '__main__':
 
     feats_method_1 = FeatureDB.load_feature_db('data/dbs/method2features')
     feats_method_2 = FeatureDB.load_feature_db('data/dbs/method3features')
+    FeatureDB(img_path).export_features('data/dbs/method1features', method=Method1Extractor())
 
-    d = CosineDistance()
+    d = CosineSimilarity()
     irp = IRP([feats_method_1, feats_method_2], d)
     results = irp.sort(img_1)
-
-
 
