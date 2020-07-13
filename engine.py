@@ -20,7 +20,7 @@ class FeatureDB(object):
     @classmethod
     def load_feature_db(cls, db_path: str):
         with open(db_path, 'rb') as f:
-            feature_db = torch.load(f)
+            feature_db = torch.load(f, map_location=torch.device('cpu'))
         return feature_db
 
     def load_images(self):
@@ -50,18 +50,10 @@ class FeatureDB(object):
                 features[image_label] = method(img)
         elif isinstance(method, CNNFeatureExtractor):
 
-            # groups images
-            grouped_img = defaultdict(list)
-            for image_filename in tqdm(img_filenames, "Grouping images"):
-                img = cv.cvtColor(cv.imread(image_filename, cv.IMREAD_COLOR), cv.COLOR_BGR2RGB)
-                shape = str(img.shape)
-                grouped_img[shape].append(image_filename)
-
             # stacks them into a tensor
-            print("Extracting features...")
-            for shape, images in grouped_img.items():
-                img_list = [cv.cvtColor(cv.imread(item, cv.IMREAD_COLOR), cv.COLOR_BGR2RGB) for item in images]
-                img_names = [image_filename.split("/")[-1] for image_filename in images]
+            for image_filename in tqdm(img_filenames, "Extracting features"):
+                img_list = [cv.cvtColor(cv.imread(image_filename, cv.IMREAD_COLOR), cv.COLOR_BGR2RGB)]
+                img_names = [image_filename.split("/")[-1]]
                 img_stacked = np.stack(img_list)
                 img_similarities = method(img_stacked)
                 features.update(dict(zip(img_names, img_similarities)))
@@ -74,6 +66,9 @@ class FeatureDB(object):
             torch.save(self, f)
 
         print("Ready!")
+
+    def set_img_db_path(self, img_db_path: str):
+        self.img_db_path = img_db_path
 
     def __len__(self):
         if self.features:
@@ -102,7 +97,7 @@ class Ranker(object):
             image_feature = feature_extractor(image)
         else:
             # dirty adapter code
-            image_feature = feature_extractor(torch.tensor(image).unsqueeze(0))
+            image_feature = feature_extractor(np.stack([image]))[0]
 
         similarities = []
         for key, other_feature in self.feature_db.features.items():
@@ -258,6 +253,12 @@ class Visualizer(object):
 
 if __name__ == '__main__':
     img_path = 'data/jpg'
+    image = '100000.jpg'
     weights = 'data/model_weights/googlenet-1378be20.pth'
-    FeatureDB(img_path).export_features('data/dbs/gnetfeatures', method=GoogleNet(weights))
-
+    # FeatureDB(img_path).export_features('data/dbs/gnetfeatures', method=GoogleNet(weights))
+    f = FeatureDB.load_feature_db('data/dbs/gnetfeatures')
+    f.set_img_db_path(img_path)
+    r = Ranker(f)
+    d = CosineSimilarity()
+    results = r.query(image, d)
+    print("")

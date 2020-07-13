@@ -34,7 +34,7 @@ class HistogramFeatureExtractor(FeatureExtractor):
             hist[i] /= bin_length*total
         return hist
 
-    def __call__(self, input_img: np.array):
+    def __call__(self, input_img: np.array) -> np.array:
         """
         Calculates the feature vector of an RGB input image.
 
@@ -194,6 +194,7 @@ class CNNFeatureExtractor(FeatureExtractor):
         self.model = model(pretrained=False)
         weights = torch.load(weight_dir)
         self.model.load_state_dict(weights)
+        self.model.to(torch.device('cuda' if torch.cuda.is_available() else 'cpu'))
         self.model.eval()
 
     def prepare_image(self, images: np.array):
@@ -211,7 +212,7 @@ class CNNFeatureExtractor(FeatureExtractor):
         for idx in range(images.shape[0]):
             images[idx, :, :, :] = self.NORMALIZER(images[idx, :, :, :])
         images = images.float()
-
+        images = images.to(torch.device('cuda' if torch.cuda.is_available() else 'cpu'))
         return images
 
     def __call__(self, *args, **kwargs):
