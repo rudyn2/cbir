@@ -2,14 +2,14 @@ from abc import abstractmethod
 import numpy as np
 
 
-class DistanceMeasure(object):
+class SimilarityMeasure(object):
 
     @abstractmethod
     def __call__(self, *args, **kwargs):
         raise NotImplementedError
 
 
-class ChiSquareSimilarity(DistanceMeasure):
+class ChiSquareSimilarity(SimilarityMeasure):
 
     def __call__(self, x: np.array, y: np.array) -> np.float:
         assert x.shape == y.shape, "x and y must be equal"
@@ -17,7 +17,7 @@ class ChiSquareSimilarity(DistanceMeasure):
         return 1 / (1 + distance)
 
 
-class EuclideanSimilarity(DistanceMeasure):
+class EuclideanSimilarity(SimilarityMeasure):
 
     def __call__(self, x: np.array, y: np.array) -> np.float:
         assert x.shape == y.shape, "x and y must be equal"
@@ -25,7 +25,7 @@ class EuclideanSimilarity(DistanceMeasure):
         return 1 / (1 + distance)
 
 
-class CosineSimilarity(DistanceMeasure):
+class CosineSimilarity(SimilarityMeasure):
 
     def __call__(self, x: np.array, y: np.array) -> np.float:
         assert x.shape == y.shape, "x and y must be equal"

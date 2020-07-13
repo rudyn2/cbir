@@ -17,15 +17,6 @@ class FeatureDB(object):
         self.features: dict = {}
         self.feature_extractor: FeatureExtractor = None
 
-    @staticmethod
-    def _load_images(img_db: str):
-        img_filenames = glob.glob(img_db + '/*.jpg')
-        db = {}
-        for image_filename in tqdm(img_filenames, "Loading images"):
-            image_label = image_filename.split("/")[-1]
-            db[image_label] = cv.cvtColor(cv.imread(image_filename, cv.IMREAD_COLOR), cv.COLOR_BGR2RGB)
-        return db
-
     @classmethod
     def load_feature_db(cls, db_path: str):
         with open(db_path, 'rb') as f:
@@ -33,7 +24,12 @@ class FeatureDB(object):
         return feature_db
 
     def load_images(self):
-        self.images = self._load_images(self.img_db_path)
+        img_filenames = glob.glob(self.img_db_path + '/*.jpg')
+        db = {}
+        for image_filename in tqdm(img_filenames, "Loading images"):
+            image_label = image_filename.split("/")[-1]
+            db[image_label] = cv.cvtColor(cv.imread(image_filename, cv.IMREAD_COLOR), cv.COLOR_BGR2RGB)
+        return db
 
     def export_features(self, output_db_name: str, method: FeatureExtractor):
         """
@@ -44,26 +40,28 @@ class FeatureDB(object):
         :param method:
             Method used for feature extraction
         """
-        db = self._load_images(self.img_db_path) if not self.images else self.images
-
+        img_filenames = glob.glob(self.img_db_path + '/*.jpg')
         features = {}
 
         if isinstance(method, HistogramFeatureExtractor):
-            for key, img in tqdm(db.items(), "Extracting features"):
-                features[key] = method(img)
+            for image_filename in tqdm(img_filenames, "Extracting features ..."):
+                image_label = image_filename.split("/")[-1]
+                img = cv.cvtColor(cv.imread(image_filename, cv.IMREAD_COLOR), cv.COLOR_BGR2RGB)
+                features[image_label] = method(img)
         elif isinstance(method, CNNFeatureExtractor):
 
             # groups images
             grouped_img = defaultdict(list)
-            for key, img in db.items():
+            for image_filename in tqdm(img_filenames, "Grouping images"):
+                img = cv.cvtColor(cv.imread(image_filename, cv.IMREAD_COLOR), cv.COLOR_BGR2RGB)
                 shape = str(img.shape)
-                grouped_img[shape].append((key, img))
+                grouped_img[shape].append(image_filename)
 
             # stacks them into a tensor
             print("Extracting features...")
             for shape, images in grouped_img.items():
-                img_list = [item[1] for item in images]
-                img_names = [item[0] for item in images]
+                img_list = [cv.cvtColor(cv.imread(item, cv.IMREAD_COLOR), cv.COLOR_BGR2RGB) for item in images]
+                img_names = [image_filename.split("/")[-1] for image_filename in images]
                 img_stacked = np.stack(img_list)
                 img_similarities = method(img_stacked)
                 features.update(dict(zip(img_names, img_similarities)))
@@ -94,7 +92,7 @@ class Ranker(object):
     def extract_class(s: str):
         return int(s.split(".")[0][1:4])
 
-    def query(self, image: str, similarity_fn: DistanceMeasure) -> List[np.array]:
+    def query(self, image: str, similarity_fn: SimilarityMeasure) -> List[np.array]:
         """Makes a query to the DB and returns the sorted similarity between the query and each image
         stored in the DB."""
 
@@ -113,7 +111,7 @@ class Ranker(object):
 
         return sorted(similarities, key=lambda x: x[1], reverse=True)
 
-    def query_rank(self, image: np.array, image_label: str, similarity_fn: DistanceMeasure, top_k: int = 10):
+    def query_rank(self, image: np.array, image_label: str, similarity_fn: SimilarityMeasure, top_k: int = 10):
         """Makes a query to the DB and returns the top k results, the rank and number of total relevant images
         that belongs to the same class as the query."""
 
@@ -131,7 +129,7 @@ class Ranker(object):
         rank /= total_query_in_class
         return top_query_results, rank, total_query_in_class
 
-    def query_normalized_rank(self, image: np.array, image_label: str, similarity_fn: DistanceMeasure, top_k: int = 10):
+    def query_normalized_rank(self, image: np.array, image_label: str, similarity_fn: SimilarityMeasure, top_k: int = 10):
         """Makes a query to the DB and returns the top k results, the normalized rank and number of total relevant images
         that belongs to the same class as the query."""
 
@@ -260,13 +258,6 @@ class Visualizer(object):
 
 if __name__ == '__main__':
     img_path = 'data/jpg'
-    img_1, img_2, img_3 = '100000.jpg', '101000.jpg', '102000.jpg'
-
-    feats_method_1 = FeatureDB.load_feature_db('data/dbs/method2features')
-    feats_method_2 = FeatureDB.load_feature_db('data/dbs/method3features')
-    FeatureDB(img_path).export_features('data/dbs/method1features', method=Method1Extractor())
-
-    d = CosineSimilarity()
-    irp = IRP([feats_method_1, feats_method_2], d)
-    results = irp.sort(img_1)
+    weights = 'data/model_weights/googlenet-1378be20.pth'
+    FeatureDB(img_path).export_features('data/dbs/gnetfeatures', method=GoogleNet(weights))
 

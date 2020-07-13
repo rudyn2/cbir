@@ -1,12 +1,11 @@
 import numpy as np
 from abc import abstractmethod
-from typing import Tuple, List
+from typing import List
 import matplotlib.pyplot as plt
 import cv2 as cv
 import torchvision.models as models
 import torch
 from torchvision import transforms
-import torch.nn as nn
 
 
 class FeatureExtractor(object):
