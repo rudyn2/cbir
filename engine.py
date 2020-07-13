@@ -6,6 +6,8 @@ from typing import List
 import torch
 from collections import defaultdict
 import matplotlib.pyplot as plt
+import warnings
+warnings.filterwarnings("ignore")
 
 
 class FeatureDB(object):
@@ -100,7 +102,7 @@ class Ranker(object):
             image_feature = feature_extractor(np.stack([image]))[0]
 
         similarities = []
-        for key, other_feature in self.feature_db.features.items():
+        for key, other_feature in tqdm(self.feature_db.features.items(), "Comparing"):
             img_name, similarity = key, similarity_fn(image_feature, other_feature)
             similarities.append((img_name, similarity))
 
