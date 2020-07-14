@@ -9,11 +9,11 @@ if __name__ == '__main__':
     feat1 = FeatureDB.load_feature_db(db_path + '/method1features')
     feat2 = FeatureDB.load_feature_db(db_path + '/method2features')
     feat3 = FeatureDB.load_feature_db(db_path + '/method3features')
-    # feat4 = FeatureDB.load_feature_db(db_path + '/method4features')
+    feat4 = FeatureDB.load_feature_db(db_path + '/method4features')
 
-    cosine_sim = CosineSimilarity()
+    cosine_sim = ChiSquareSimilarity()
 
-    feat_dbs = [feat1, feat2, feat3]
+    feat_dbs = [feat1, feat2, feat3, feat4]
 
     for idx, feat_db in enumerate(feat_dbs):
         print(f"Results FDB {idx+1}")

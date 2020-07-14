@@ -13,7 +13,11 @@ class ChiSquareSimilarity(SimilarityMeasure):
 
     def __call__(self, x: np.array, y: np.array) -> np.float:
         assert x.shape == y.shape, "x and y must be equal"
-        distance = 0.5 * np.sum(np.divide((x-y)**2, x+y))
+        den = x + y
+        num = (x-y)**2
+        num = num[den != 0]
+        den = den[den != 0]
+        distance = 0.5 * np.sum(np.divide(num, den))
         return 1 / (1 + distance)
 
 
