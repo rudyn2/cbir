@@ -102,38 +102,35 @@ class Ranker(object):
             image_feature = feature_extractor(np.stack([image]))[0]
 
         similarities = []
-        for key, other_feature in tqdm(self.feature_db.features.items(), "Comparing"):
+        for key, other_feature in self.feature_db.features.items():
             img_name, similarity = key, similarity_fn(image_feature, other_feature)
             similarities.append((img_name, similarity))
 
         return sorted(similarities, key=lambda x: x[1], reverse=True)
 
-    def query_rank(self, image: np.array, image_label: str, similarity_fn: SimilarityMeasure, top_k: int = 10):
+    def query_rank(self, image_label: str, similarity_fn: SimilarityMeasure, top_k: int = 10):
         """Makes a query to the DB and returns the top k results, the rank and number of total relevant images
         that belongs to the same class as the query."""
 
-        query_class = self.extract_class(image_label)
-        query_results = self.query(image, similarity_fn)
+        query_results = self.query(image_label, similarity_fn)
+        return self.rank_this(image_label, query_results, top_k, len(self.feature_db))
+
+    @classmethod
+    def rank_this(cls, image_label: str, query_results: list, top_k: int, total: int):
+
+        query_class = cls.extract_class(image_label)
         top_query_results = query_results[:top_k]
         rank = 0
         total_query_in_class = 0
         for idx, (label, score) in enumerate(top_query_results):
-            img_class = self.extract_class(label)
+            img_class = cls.extract_class(label)
             if img_class == query_class:
                 rank += idx + 1
                 total_query_in_class += 1
-
         rank /= total_query_in_class
-        return top_query_results, rank, total_query_in_class
+        norm_rank = (rank - (total_query_in_class + 1) / 2) / total
 
-    def query_normalized_rank(self, image: np.array, image_label: str, similarity_fn: SimilarityMeasure, top_k: int = 10):
-        """Makes a query to the DB and returns the top k results, the normalized rank and number of total relevant images
-        that belongs to the same class as the query."""
-
-        top_query_results, rank, total_query_in_class = self.query_rank(image, image_label, similarity_fn, top_k)
-        norm_rank = (rank - (total_query_in_class + 1) / 2) / len(self.feature_db)
-
-        return top_query_results, norm_rank, total_query_in_class
+        return top_query_results, total_query_in_class, rank, norm_rank
 
 
 class IRP(object):
