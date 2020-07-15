@@ -232,16 +232,16 @@ class Visualizer(object):
     def plot_query_best_3(self, query_img: List[str], img_results: List[List]):
 
         assert len(query_img) == len(img_results)
-        assert len(query_img) <= 5
+        assert len(query_img) <= 7
 
-        fig, axs = plt.subplots(nrows=4, ncols=len(query_img), figsize=(10, 16))
+        fig, axs = plt.subplots(nrows=4, ncols=len(query_img), figsize=(30, 32))
         for i in range(4):
             for j in range(len(query_img)):
                 # first row: query images
                 ax = axs[i, j]
                 if i == 0:
                     img_ = self.read_img(query_img[j])
-                    ax.set(title="Query image")
+                    ax.set(title=f"Query image ({query_img[j]})")
                 else:
                     img_ = self.read_img(img_results[j][i-1][0])
                     ax.set(title=f"{img_results[j][i-1][1]:.4f}")
