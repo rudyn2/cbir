@@ -229,7 +229,7 @@ class Visualizer(object):
 
         plt.show()
 
-    def plot_query_best_3(self, query_img: List[str], img_results: List[List]):
+    def plot_query_best_3(self, query_img: List[str], img_results: List[List], output_name: str = ''):
 
         assert len(query_img) == len(img_results)
         assert len(query_img) <= 7
@@ -247,6 +247,9 @@ class Visualizer(object):
                     ax.set(title=f"{img_results[j][i-1][1]:.4f}")
                 ax.axis('off')
                 ax.imshow(img_)
+        plt.tight_layout()
+        if output_name != '':
+            plt.savefig(output_name, optimize=True)
         plt.show()
 
 

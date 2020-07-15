@@ -14,6 +14,6 @@ if __name__ == '__main__':
 
     query_images = ['101000.jpg', '100100.jpg', '107200.jpg', '102300.jpg', '100200.jpg', '130400.jpg', '111400.jpg']
     query_results = [r.query(q_img, similarity_fn=d) for q_img in query_images]
-    v.plot_query_best_3(query_images, query_results)
+    v.plot_query_best_3(query_images, query_results, output_name='example3.jpg')
 
     print("")
