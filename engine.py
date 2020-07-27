@@ -4,10 +4,20 @@ from features import *
 from distances import *
 from typing import List
 import torch
-from collections import defaultdict
 import matplotlib.pyplot as plt
 import warnings
 warnings.filterwarnings("ignore")
+
+plt.rcParams.update({'font.size': 25})
+
+
+def zero_pad(obj, reference_shape: tuple):
+    result = []
+    for channel in range(obj.shape[2]):
+        channel_padded = np.zeros(reference_shape)
+        channel_padded[:obj.shape[0], :obj.shape[1]] = obj[:, :, channel]
+        result.append(channel_padded)
+    return np.stack(result, axis=-1).astype('uint8')
 
 
 class FeatureDB(object):
@@ -50,6 +60,12 @@ class FeatureDB(object):
                 image_label = image_filename.split("/")[-1]
                 img = cv.cvtColor(cv.imread(image_filename, cv.IMREAD_COLOR), cv.COLOR_BGR2RGB)
                 features[image_label] = method(img)
+        elif isinstance(method, HogExtractor):
+            for image_filename in tqdm(img_filenames, "Extracting features ..."):
+                image_label = image_filename.split("/")[-1]
+                img = cv.cvtColor(cv.imread(image_filename, cv.IMREAD_COLOR), cv.COLOR_BGR2RGB)
+                features[image_label] = method(zero_pad(img, reference_shape=(3888, 3888)))
+
         elif isinstance(method, CNNFeatureExtractor):
 
             # stacks them into a tensor
@@ -128,7 +144,7 @@ class Ranker(object):
                 rank += idx + 1
                 total_query_in_class += 1
         rank /= total_query_in_class
-        norm_rank = (rank - (total_query_in_class + 1) / 2) / total
+        norm_rank = (rank - (total_query_in_class + 1) / 2) / (total - total_query_in_class)
 
         return top_query_results, total_query_in_class, rank, norm_rank
 
@@ -205,7 +221,7 @@ class Visualizer(object):
         assert k_best <= 10 and k_best % 2 == 0, "Number of images to plot has to be an even number less than 10"
         top_k = img_results[:k_best]
 
-        fig = plt.figure(figsize=(16, 10))
+        fig = plt.figure(figsize=(32, 25))
         gs = fig.add_gridspec(2, ncols=int(k_best/2) + 1)
 
         idx = 0
@@ -234,14 +250,14 @@ class Visualizer(object):
         assert len(query_img) == len(img_results)
         assert len(query_img) <= 7
 
-        fig, axs = plt.subplots(nrows=4, ncols=len(query_img), figsize=(30, 32))
+        fig, axs = plt.subplots(nrows=4, ncols=len(query_img), figsize=(32, 34))
         for i in range(4):
             for j in range(len(query_img)):
                 # first row: query images
                 ax = axs[i, j]
                 if i == 0:
                     img_ = self.read_img(query_img[j])
-                    ax.set(title=f"Query image ({query_img[j]})")
+                    ax.set(title=f"q({query_img[j]})")
                 else:
                     img_ = self.read_img(img_results[j][i-1][0])
                     ax.set(title=f"{img_results[j][i-1][1]:.4f}")
@@ -251,16 +267,3 @@ class Visualizer(object):
         if output_name != '':
             plt.savefig(output_name, optimize=True)
         plt.show()
-
-
-if __name__ == '__main__':
-    img_path = 'data/jpg'
-    image = '100000.jpg'
-    weights = 'data/model_weights/googlenet-1378be20.pth'
-    # FeatureDB(img_path).export_features('data/dbs/gnetfeatures', method=GoogleNet(weights))
-    f = FeatureDB.load_feature_db('data/dbs/gnetfeatures')
-    f.set_img_db_path(img_path)
-    r = Ranker(f)
-    d = CosineSimilarity()
-    results = r.query(image, d)
-    print("")

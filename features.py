@@ -6,6 +6,7 @@ import cv2 as cv
 import torchvision.models as models
 import torch
 from torchvision import transforms
+from skimage.feature import hog
 
 
 class FeatureExtractor(object):
@@ -90,6 +91,15 @@ class Method4Extractor(HistogramFeatureExtractor):
 
     def divide(self, image: np.array):
         return self.patch_generator(image)
+
+
+class HogExtractor(FeatureExtractor):
+
+    def __init__(self, ppc: int):
+        self.ppc = ppc
+
+    def __call__(self, image: np.array) -> np.array:
+        return hog(image, orientations=8, pixels_per_cell=(self.ppc, self.ppc), cells_per_block=(1, 1), block_norm='L2')
 
 
 class ImagePatchGenerator(object):
